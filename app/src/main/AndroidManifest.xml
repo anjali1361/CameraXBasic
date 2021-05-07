@@ -15,6 +15,9 @@
     <!-- Declare permissions -->
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"

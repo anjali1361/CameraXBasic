@@ -1,10 +1,9 @@
 package com.android.example.cameraxbasic.fragments
 
+import android.Manifest
 import android.annotation.SuppressLint
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
+import android.content.*
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -13,27 +12,22 @@ import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.util.DisplayMetrics
 import android.util.Log
-import android.view.KeyEvent
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
+import android.view.*
 import android.webkit.MimeTypeMap
+import android.widget.EditText
 import android.widget.ImageButton
-import androidx.camera.core.AspectRatio
-import androidx.camera.core.Camera
-import androidx.camera.core.CameraInfoUnavailableException
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ImageCapture
+import android.widget.Toast
+import androidx.camera.core.*
 import androidx.camera.core.ImageCapture.Metadata
-import androidx.camera.core.ImageCaptureException
-import androidx.camera.core.ImageProxy
-import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toFile
 import androidx.core.view.setPadding
@@ -45,24 +39,25 @@ import com.android.example.cameraxbasic.KEY_EVENT_ACTION
 import com.android.example.cameraxbasic.KEY_EVENT_EXTRA
 import com.android.example.cameraxbasic.MainActivity
 import com.android.example.cameraxbasic.R
-import com.android.example.cameraxbasic.utils.ANIMATION_FAST_MILLIS
-import com.android.example.cameraxbasic.utils.ANIMATION_SLOW_MILLIS
-import com.android.example.cameraxbasic.utils.simulateClick
+import com.android.example.cameraxbasic.utils.*
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.RequestOptions
+import kotlinx.android.synthetic.main.camera_ui_container.view.*
+import kotlinx.android.synthetic.main.mic_alert.*
+import kotlinx.android.synthetic.main.mic_alert.view.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
 import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
-import java.util.ArrayDeque
-import java.util.Locale
+import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.collections.ArrayList
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+
 
 /** Helper type alias used for analysis use case callbacks */
 typealias LumaListener = (luma: Double) -> Unit
@@ -74,11 +69,16 @@ typealias LumaListener = (luma: Double) -> Unit
  * - Image analysis
  */
 class CameraFragment : Fragment() {
+//
+//    private var speechRecognizer: SpeechRecognizer? = null
 
     private lateinit var container: ConstraintLayout
     private lateinit var viewFinder: PreviewView
     private lateinit var outputDirectory: File
     private lateinit var broadcastManager: LocalBroadcastManager
+    var mic_tap = false
+
+    private val audio_noise_sensitivity = -1
 
     private var displayId: Int = -1
     private var lensFacing: Int = CameraSelector.LENS_FACING_BACK
@@ -87,6 +87,7 @@ class CameraFragment : Fragment() {
     private var imageAnalyzer: ImageAnalysis? = null
     private var camera: Camera? = null
     private var cameraProvider: ProcessCameraProvider? = null
+
 
     private val displayManager by lazy {
         requireContext().getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
@@ -175,8 +176,12 @@ class CameraFragment : Fragment() {
     @SuppressLint("MissingPermission")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+//        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(requireContext())
+
         container = view as ConstraintLayout
         viewFinder = container.findViewById(R.id.view_finder)
+
 
         // Initialize our background executor
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -246,6 +251,7 @@ class CameraFragment : Fragment() {
             // Build and bind the camera use cases
             bindCameraUseCases()
         }, ContextCompat.getMainExecutor(requireContext()))
+
     }
 
     /** Declare and bind preview, capture and analysis use cases */
@@ -362,74 +368,62 @@ class CameraFragment : Fragment() {
         // Listener for button used to capture photo
         controls.findViewById<ImageButton>(R.id.camera_capture_button).setOnClickListener {
 
+            if (mic_tap){
+                Log.e(TAG, "Entered to mic")
+
+              Thread(Runnable {
+                  requireActivity().runOnUiThread(java.lang.Runnable {
+                      Log.e(TAG, "Entered to runnable")
+                    val speechRecognizer = SpeechRecognizer.createSpeechRecognizer(requireContext())
+                      val speechRecognizerIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+
+                      speechRecognizerIntent.putExtra(
+                          RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                          RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                      )
+                      speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+
+                      speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+                          override fun onReadyForSpeech(bundle: Bundle) {}
+                          override fun onBeginningOfSpeech() {
+                              Log.e(TAG, "Entered to setRecognitionListener")
+                              controls.findViewById<EditText>(R.id.editText).setText("")
+                              controls.findViewById<EditText>(R.id.editText)
+                                  .setHint("Listening...")
+                          }
+
+                          override fun onRmsChanged(v: Float) {}
+                          override fun onBufferReceived(bytes: ByteArray) {}
+                          override fun onEndOfSpeech() {}
+                          override fun onError(i: Int) {}
+                          override fun onResults(bundle: Bundle) {
+                              controls.findViewById<ImageButton>(R.id.camera_capture_button).setImageResource(R.drawable.ic_baseline_mic_24_red)
+                              val data = bundle.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                              controls.findViewById<EditText>(R.id.editText).setText(data!![0])
+                          }
+
+                          override fun onPartialResults(bundle: Bundle) {}
+                          override fun onEvent(i: Int, bundle: Bundle) {}
+                      })
+
+                      controls.findViewById<ImageButton>(R.id.camera_capture_button).setOnTouchListener{ view, motionEvent ->
+                          if (motionEvent.action == MotionEvent.ACTION_UP) {
+                              speechRecognizer?.stopListening()
+                          }
+                          if (motionEvent.action == MotionEvent.ACTION_DOWN) {
+                              controls.findViewById<ImageButton>(R.id.camera_capture_button).setImageResource(R.drawable.ic_baseline_mic_24)
+                              speechRecognizer?.startListening(speechRecognizerIntent)
+
+                          }
+                          false
+                      }
+                  })
+              })
+
+            }
             // Get a stable reference of the modifiable image capture use case
-            imageCapture?.let { imageCapture ->
-
-                // Create output file to hold the image
-                val photoFile = createFile(outputDirectory, FILENAME, PHOTO_EXTENSION)
-
-                // Setup image capture metadata
-                val metadata = Metadata().apply {
-
-                    // Mirror image when using the front camera
-                    isReversedHorizontal = lensFacing == CameraSelector.LENS_FACING_FRONT
-                }
-
-                // Create output options object which contains file + metadata
-                val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile)
-                        .setMetadata(metadata)
-                        .build()
-
-                // Setup image capture listener which is triggered after photo has been taken
-                imageCapture.takePicture(
-                        outputOptions, cameraExecutor, object : ImageCapture.OnImageSavedCallback {
-                    override fun onError(exc: ImageCaptureException) {
-                        Log.e(TAG, "Photo capture failed: ${exc.message}", exc)
-                    }
-
-                    override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                        val savedUri = output.savedUri ?: Uri.fromFile(photoFile)
-                        Log.d(TAG, "Photo capture succeeded: $savedUri")
-
-                        // We can only change the foreground Drawable using API level 23+ API
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                            // Update the gallery thumbnail with latest picture taken
-                            setGalleryThumbnail(savedUri)
-                        }
-
-                        // Implicit broadcasts will be ignored for devices running API level >= 24
-                        // so if you only target API level 24+ you can remove this statement
-                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-                            requireActivity().sendBroadcast(
-                                    Intent(android.hardware.Camera.ACTION_NEW_PICTURE, savedUri)
-                            )
-                        }
-
-                        // If the folder selected is an external media directory, this is
-                        // unnecessary but otherwise other apps will not be able to access our
-                        // images unless we scan them using [MediaScannerConnection]
-                        val mimeType = MimeTypeMap.getSingleton()
-                                .getMimeTypeFromExtension(savedUri.toFile().extension)
-                        MediaScannerConnection.scanFile(
-                                context,
-                                arrayOf(savedUri.toFile().absolutePath),
-                                arrayOf(mimeType)
-                        ) { _, uri ->
-                            Log.d(TAG, "Image capture scanned into media store: $uri")
-                        }
-                    }
-                })
-
-                // We can only change the foreground Drawable using API level 23+ API
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-
-                    // Display flash animation to indicate that photo was captured
-                    container.postDelayed({
-                        container.foreground = ColorDrawable(Color.WHITE)
-                        container.postDelayed(
-                                { container.foreground = null }, ANIMATION_FAST_MILLIS)
-                    }, ANIMATION_SLOW_MILLIS)
-                }
+         else{
+             takePicture()
             }
         }
 
@@ -459,6 +453,190 @@ class CameraFragment : Fragment() {
                         requireActivity(), R.id.fragment_container
                 ).navigate(CameraFragmentDirections
                         .actionCameraToGallery(outputDirectory.absolutePath))
+            }
+        }
+
+        controls.findViewById<ImageButton>(R.id.mic).setOnClickListener {
+
+            if (ContextCompat.checkSelfPermission(
+                    requireContext(),
+                    Manifest.permission.RECORD_AUDIO
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                checkPermission()
+            } else {
+                if (!mic_tap) {
+                    mic_tap = true
+                    controls.findViewById<EditText>(R.id.editText).visibility =
+                        View.VISIBLE
+                    controls.findViewById<ImageButton>(R.id.camera_capture_button).setImageResource(R.drawable.ic_baseline_mic_24)
+//                    controls.findViewById<ImageButton>(R.id.camera_capture_button).setOnClickListener{
+//
+//                    }
+                }
+                else{
+                    mic_tap = false
+                    controls.findViewById<EditText>(R.id.editText).visibility = View.INVISIBLE
+                    controls.findViewById<ImageButton>(R.id.camera_capture_button).setImageResource(R.drawable.ic_shutter)
+                }
+            }
+            //else{
+//                val mSpeechDialog = LayoutInflater.from(context).inflate(R.layout.mic_alert,null)
+//                val mBuilder = AlertDialog.Builder(requireContext())
+//                    .setView(mSpeechDialog)
+//                    .setIcon(R.drawable.ic_baseline_close_24)
+//                    .setTitle(R.string.mic_title)
+//
+//                val mAlertDialog = mBuilder.show()
+//                mSpeechDialog.button.setOnClickListener{
+//                   // mAlertDialog.dismiss()
+//                    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(requireContext())
+//                    val speechRecognizerIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+//                    speechRecognizerIntent.putExtra(
+//                        RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+//                        RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+//                    )
+//                    speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+//                    speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+//                        override fun onReadyForSpeech(bundle: Bundle) {}
+//                        override fun onBeginningOfSpeech() {
+//                            mSpeechDialog.text.setText("")
+//                            mSpeechDialog.text.setHint("Listening...")
+//                        }
+//
+//                        override fun onRmsChanged(v: Float) {}
+//                        override fun onBufferReceived(bytes: ByteArray) {}
+//                        override fun onEndOfSpeech() {}
+//                        override fun onError(i: Int) {}
+//                        override fun onResults(bundle: Bundle) {
+//                            mSpeechDialog.button.setImageResource(R.drawable.ic_baseline_mic_24)
+//                            val data = bundle.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+//                            mSpeechDialog.text.setText(data!![0])
+//                        }
+//
+//                        override fun onPartialResults(bundle: Bundle) {}
+//                        override fun onEvent(i: Int, bundle: Bundle) {}
+//                    })
+//
+//                    mSpeechDialog.button.setOnTouchListener{ view, motionEvent ->
+//                        if (motionEvent.action == MotionEvent.ACTION_UP) {
+//                            speechRecognizer?.stopListening()
+//                        }
+//                        if (motionEvent.action == MotionEvent.ACTION_DOWN) {
+//                            mSpeechDialog.button.setImageResource(R.drawable.ic_baseline_mic_24_red)
+//                            speechRecognizer?.startListening(speechRecognizerIntent)
+//                        }
+//                        false
+//                    }
+//                 //   val speech = mSpeechDialog.text.setText("Listening").toString()
+//                }
+////                mSpeechDialog.cancel.setOnClickListener{
+////                  mAlertDialog.dismiss()
+////                }
+//
+//            }
+//
+        }
+    }
+
+    private fun checkPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            ActivityCompat.requestPermissions(
+                requireActivity(),
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                MainActivity.RecordAudioRequestCode
+            )
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == MainActivity.RecordAudioRequestCode && grantResults.size > 0) {
+            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) Toast.makeText(
+                context,
+                "Permission Granted",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+//    override fun onDestroy() {
+//        super.onDestroy()
+//        speechRecognizer!!.destroy()
+//    }
+
+    private fun takePicture() {
+
+        imageCapture?.let { imageCapture ->
+
+            // Create output file to hold the image
+            val photoFile = createFile(outputDirectory, FILENAME, PHOTO_EXTENSION)
+
+            // Setup image capture metadata
+            val metadata = Metadata().apply {
+
+                // Mirror image when using the front camera
+                isReversedHorizontal = lensFacing == CameraSelector.LENS_FACING_FRONT
+            }
+
+            // Create output options object which contains file + metadata
+            val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile)
+                .setMetadata(metadata)
+                .build()
+
+            // Setup image capture listener which is triggered after photo has been taken
+            imageCapture.takePicture(
+                outputOptions, cameraExecutor, object : ImageCapture.OnImageSavedCallback {
+                    override fun onError(exc: ImageCaptureException) {
+                        Log.e(TAG, "Photo capture failed: ${exc.message}", exc)
+                    }
+
+                    override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                        val savedUri = output.savedUri ?: Uri.fromFile(photoFile)
+                        Log.d(TAG, "Photo capture succeeded: $savedUri")
+
+                        // We can only change the foreground Drawable using API level 23+ API
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            // Update the gallery thumbnail with latest picture taken
+                            setGalleryThumbnail(savedUri)
+                        }
+
+                        // Implicit broadcasts will be ignored for devices running API level >= 24
+                        // so if you only target API level 24+ you can remove this statement
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+                            requireActivity().sendBroadcast(
+                                Intent(android.hardware.Camera.ACTION_NEW_PICTURE, savedUri)
+                            )
+                        }
+
+                        // If the folder selected is an external media directory, this is
+                        // unnecessary but otherwise other apps will not be able to access our
+                        // images unless we scan them using [MediaScannerConnection]
+                        val mimeType = MimeTypeMap.getSingleton()
+                            .getMimeTypeFromExtension(savedUri.toFile().extension)
+                        MediaScannerConnection.scanFile(
+                            context,
+                            arrayOf(savedUri.toFile().absolutePath),
+                            arrayOf(mimeType)
+                        ) { _, uri ->
+                            Log.d(TAG, "Image capture scanned into media store: $uri")
+                        }
+                    }
+                })
+
+            // We can only change the foreground Drawable using API level 23+ API
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+
+                // Display flash animation to indicate that photo was captured
+                container.postDelayed({
+                    container.foreground = ColorDrawable(Color.WHITE)
+                    container.postDelayed(
+                        { container.foreground = null }, ANIMATION_FAST_MILLIS)
+                }, ANIMATION_SLOW_MILLIS)
             }
         }
     }
@@ -583,4 +761,5 @@ class CameraFragment : Fragment() {
                 File(baseFolder, SimpleDateFormat(format, Locale.US)
                         .format(System.currentTimeMillis()) + extension)
     }
+
 }

@@ -30,7 +30,6 @@
         android:layout_marginEnd="@dimen/shutter_button_margin"
         android:background="@drawable/ic_shutter"
         android:contentDescription="@string/capture_button_alt"
-        android:scaleType="fitXY"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
@@ -48,5 +47,40 @@
         app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         android:contentDescription="@string/switch_camera_button_alt" />
+
+
+    <ImageButton
+        android:id="@+id/mic"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
+        android:background="@drawable/ic_outer_circle"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.095"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.102"
+        app:srcCompat="@drawable/ic_baseline_mic_24" />
+
+    <EditText
+        android:id="@+id/editText"
+        android:layout_width="220dp"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="10dp"
+        android:background="@android:color/transparent"
+        android:ems="10"
+        android:hint="@string/mic_title"
+        android:inputType="textPersonName"
+        android:textAlignment="center"
+        android:textColor="@android:color/white"
+        android:textColorHint="@android:color/white"
+        android:textSize="20sp"
+        android:visibility="invisible"
+        app:layout_constraintBottom_toTopOf="@+id/camera_capture_button"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.499"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.382" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

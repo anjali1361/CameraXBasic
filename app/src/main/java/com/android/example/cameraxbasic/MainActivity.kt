@@ -1,5 +1,6 @@
 package com.android.example.cameraxbasic
 
+import android.Manifest
 import android.content.Context
 import android.os.Bundle
 import android.view.KeyEvent
@@ -7,7 +8,12 @@ import androidx.appcompat.app.AppCompatActivity
 import java.io.File
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.widget.FrameLayout
+import android.widget.Toast
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.android.example.cameraxbasic.utils.FLAGS_FULLSCREEN
 
 const val KEY_EVENT_ACTION = "key_event_action"
@@ -24,6 +30,13 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+//        if (ContextCompat.checkSelfPermission(
+//                this,
+//                Manifest.permission.RECORD_AUDIO
+//            ) != PackageManager.PERMISSION_GRANTED
+//        ) {
+//            checkPermission()
+//        }
         container = findViewById(R.id.fragment_container)
     }
 
@@ -48,8 +61,34 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+//    private fun checkPermission() {
+//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+//            ActivityCompat.requestPermissions(
+//                this,
+//                arrayOf(Manifest.permission.RECORD_AUDIO),
+//                RecordAudioRequestCode
+//            )
+//        }
+//    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == RecordAudioRequestCode && grantResults.size > 0) {
+            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) Toast.makeText(
+                this,
+                "Permission Granted",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
     companion object {
 
+        const val RecordAudioRequestCode = 1
         /** Use external media if it is available, our app's file directory otherwise */
         fun getOutputDirectory(context: Context): File {
             val appContext = context.applicationContext

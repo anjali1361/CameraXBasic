@@ -30,6 +30,8 @@ class PermissionsFragment : Fragment() {
             // If permissions have already been granted, proceed
             navigateToCamera()
         }
+
+
     }
 
     override fun onRequestPermissionsResult(

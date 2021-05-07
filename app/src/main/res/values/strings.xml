@@ -28,4 +28,6 @@
     <string name="delete_button_alt">Delete</string>
     <string name="delete_dialog">Delete current photo?</string>
     <string name="delete_title">Confirm</string>
+    <string name="mic_function">Say Cheese!!</string>
+    <string name="mic_title">Tap to Speak</string>
 </resources>
