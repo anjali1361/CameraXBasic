@@ -21,6 +21,7 @@ import android.view.*
 import android.webkit.MimeTypeMap
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.TextView
 import android.widget.Toast
 import androidx.camera.core.*
 import androidx.camera.core.ImageCapture.Metadata
@@ -71,14 +72,16 @@ typealias LumaListener = (luma: Double) -> Unit
 class CameraFragment : Fragment() {
 //
 //    private var speechRecognizer: SpeechRecognizer? = null
+    private lateinit var speech: SpeechRecognizer
+    private lateinit var recognizerIntent: Intent
 
     private lateinit var container: ConstraintLayout
     private lateinit var viewFinder: PreviewView
     private lateinit var outputDirectory: File
     private lateinit var broadcastManager: LocalBroadcastManager
+    private lateinit var editText: TextView
+    private lateinit var camera_capture_button:ImageButton
     var mic_tap = false
-
-    private val audio_noise_sensitivity = -1
 
     private var displayId: Int = -1
     private var lensFacing: Int = CameraSelector.LENS_FACING_BACK
@@ -152,8 +155,53 @@ class CameraFragment : Fragment() {
     override fun onCreateView(
             inflater: LayoutInflater,
             container: ViewGroup?,
-            savedInstanceState: Bundle?): View? =
+            savedInstanceState: Bundle?): View? {
+        val view  =
             inflater.inflate(R.layout.fragment_camera, container, false)
+        editText = view.findViewById(R.id.editText)
+        camera_capture_button = view.findViewById(R.id.camera_capture_button)
+
+        speech = SpeechRecognizer.createSpeechRecognizer(requireContext())
+        recognizerIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        recognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "US-in")
+        recognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        recognizerIntent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+        Log.i(TAG, "isRecognitionAvailable: " + SpeechRecognizer.isRecognitionAvailable(requireContext()))
+        speech.setRecognitionListener(object:RecognitionListener{
+            override fun onReadyForSpeech(params: Bundle?) {}
+
+            override fun onBeginningOfSpeech() {
+                editText.setText("")
+                editText.setHint("Listening...")}
+
+            override fun onRmsChanged(rmsdB: Float) {}
+
+            override fun onBufferReceived(buffer: ByteArray?) {}
+
+            override fun onEndOfSpeech() {}
+
+            override fun onError(error: Int) {
+                val errorMessage: String = getErrorText(error)
+                Log.d(TAG, "FAILED $errorMessage")
+                editText.setText(errorMessage)
+             //   toggleButton.isChecked = false
+            }
+
+            override fun onResults(results: Bundle?) {
+               camera_capture_button.setImageResource(R.drawable.ic_baseline_mic_24_red)
+                val data = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                editText.setText(data!![0])
+            }
+
+            override fun onPartialResults(partialResults: Bundle?) {}
+
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+
+        })
+
+        return view
+    }
 
     private fun setGalleryThumbnail(uri: Uri) {
         // Reference of the view that holds the gallery thumbnail
@@ -354,7 +402,7 @@ class CameraFragment : Fragment() {
         }
 
         // Inflate a new view containing all UI for controlling the camera
-        val controls = View.inflate(requireContext(), R.layout.camera_ui_container, container)
+        val controls: View = View.inflate(requireContext(), R.layout.camera_ui_container, container)
 
         // In the background, load latest photo taken (if any) for gallery thumbnail
         lifecycleScope.launch(Dispatchers.IO) {
@@ -366,66 +414,29 @@ class CameraFragment : Fragment() {
         }
 
         // Listener for button used to capture photo
-        controls.findViewById<ImageButton>(R.id.camera_capture_button).setOnClickListener {
 
-            if (mic_tap){
-                Log.e(TAG, "Entered to mic")
+            controls.findViewById<ImageButton>(R.id.camera_capture_button).setOnTouchListener{ view, motionEvent ->
+                    if (mic_tap)
+                    {
+                        Log.e(TAG, "Entered to mic")
+                            if (motionEvent.action == MotionEvent.ACTION_UP) {
+                                speech?.stopListening()
+                            }
+                            if (motionEvent.action == MotionEvent.ACTION_DOWN) {
+                                camera_capture_button.setImageResource(R.drawable.ic_baseline_mic_24_red)
+                                speech.startListening(recognizerIntent)
+                            }
+                        }
+                    else{
+                        takePicture()
+                    }
 
-              Thread(Runnable {
-                  requireActivity().runOnUiThread(java.lang.Runnable {
-                      Log.e(TAG, "Entered to runnable")
-                    val speechRecognizer = SpeechRecognizer.createSpeechRecognizer(requireContext())
-                      val speechRecognizerIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                    false
+                }
 
-                      speechRecognizerIntent.putExtra(
-                          RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                          RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-                      )
-                      speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
 
-                      speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-                          override fun onReadyForSpeech(bundle: Bundle) {}
-                          override fun onBeginningOfSpeech() {
-                              Log.e(TAG, "Entered to setRecognitionListener")
-                              controls.findViewById<EditText>(R.id.editText).setText("")
-                              controls.findViewById<EditText>(R.id.editText)
-                                  .setHint("Listening...")
-                          }
-
-                          override fun onRmsChanged(v: Float) {}
-                          override fun onBufferReceived(bytes: ByteArray) {}
-                          override fun onEndOfSpeech() {}
-                          override fun onError(i: Int) {}
-                          override fun onResults(bundle: Bundle) {
-                              controls.findViewById<ImageButton>(R.id.camera_capture_button).setImageResource(R.drawable.ic_baseline_mic_24_red)
-                              val data = bundle.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                              controls.findViewById<EditText>(R.id.editText).setText(data!![0])
-                          }
-
-                          override fun onPartialResults(bundle: Bundle) {}
-                          override fun onEvent(i: Int, bundle: Bundle) {}
-                      })
-
-                      controls.findViewById<ImageButton>(R.id.camera_capture_button).setOnTouchListener{ view, motionEvent ->
-                          if (motionEvent.action == MotionEvent.ACTION_UP) {
-                              speechRecognizer?.stopListening()
-                          }
-                          if (motionEvent.action == MotionEvent.ACTION_DOWN) {
-                              controls.findViewById<ImageButton>(R.id.camera_capture_button).setImageResource(R.drawable.ic_baseline_mic_24)
-                              speechRecognizer?.startListening(speechRecognizerIntent)
-
-                          }
-                          false
-                      }
-                  })
-              })
-
-            }
             // Get a stable reference of the modifiable image capture use case
-         else{
-             takePicture()
-            }
-        }
+
 
         // Setup for button used to switch cameras
         controls.findViewById<ImageButton>(R.id.camera_switch_button).let {
@@ -467,7 +478,7 @@ class CameraFragment : Fragment() {
             } else {
                 if (!mic_tap) {
                     mic_tap = true
-                    controls.findViewById<EditText>(R.id.editText).visibility =
+                    controls.findViewById<TextView>(R.id.editText).visibility =
                         View.VISIBLE
                     controls.findViewById<ImageButton>(R.id.camera_capture_button).setImageResource(R.drawable.ic_baseline_mic_24)
 //                    controls.findViewById<ImageButton>(R.id.camera_capture_button).setOnClickListener{
@@ -476,66 +487,10 @@ class CameraFragment : Fragment() {
                 }
                 else{
                     mic_tap = false
-                    controls.findViewById<EditText>(R.id.editText).visibility = View.INVISIBLE
+                    controls.findViewById<TextView>(R.id.editText).visibility = View.INVISIBLE
                     controls.findViewById<ImageButton>(R.id.camera_capture_button).setImageResource(R.drawable.ic_shutter)
                 }
             }
-            //else{
-//                val mSpeechDialog = LayoutInflater.from(context).inflate(R.layout.mic_alert,null)
-//                val mBuilder = AlertDialog.Builder(requireContext())
-//                    .setView(mSpeechDialog)
-//                    .setIcon(R.drawable.ic_baseline_close_24)
-//                    .setTitle(R.string.mic_title)
-//
-//                val mAlertDialog = mBuilder.show()
-//                mSpeechDialog.button.setOnClickListener{
-//                   // mAlertDialog.dismiss()
-//                    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(requireContext())
-//                    val speechRecognizerIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-//                    speechRecognizerIntent.putExtra(
-//                        RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-//                        RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-//                    )
-//                    speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-//                    speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-//                        override fun onReadyForSpeech(bundle: Bundle) {}
-//                        override fun onBeginningOfSpeech() {
-//                            mSpeechDialog.text.setText("")
-//                            mSpeechDialog.text.setHint("Listening...")
-//                        }
-//
-//                        override fun onRmsChanged(v: Float) {}
-//                        override fun onBufferReceived(bytes: ByteArray) {}
-//                        override fun onEndOfSpeech() {}
-//                        override fun onError(i: Int) {}
-//                        override fun onResults(bundle: Bundle) {
-//                            mSpeechDialog.button.setImageResource(R.drawable.ic_baseline_mic_24)
-//                            val data = bundle.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-//                            mSpeechDialog.text.setText(data!![0])
-//                        }
-//
-//                        override fun onPartialResults(bundle: Bundle) {}
-//                        override fun onEvent(i: Int, bundle: Bundle) {}
-//                    })
-//
-//                    mSpeechDialog.button.setOnTouchListener{ view, motionEvent ->
-//                        if (motionEvent.action == MotionEvent.ACTION_UP) {
-//                            speechRecognizer?.stopListening()
-//                        }
-//                        if (motionEvent.action == MotionEvent.ACTION_DOWN) {
-//                            mSpeechDialog.button.setImageResource(R.drawable.ic_baseline_mic_24_red)
-//                            speechRecognizer?.startListening(speechRecognizerIntent)
-//                        }
-//                        false
-//                    }
-//                 //   val speech = mSpeechDialog.text.setText("Listening").toString()
-//                }
-////                mSpeechDialog.cancel.setOnClickListener{
-////                  mAlertDialog.dismiss()
-////                }
-//
-//            }
-//
         }
     }
 
@@ -563,11 +518,6 @@ class CameraFragment : Fragment() {
             ).show()
         }
     }
-
-//    override fun onDestroy() {
-//        super.onDestroy()
-//        speechRecognizer!!.destroy()
-//    }
 
     private fun takePicture() {
 
@@ -762,4 +712,20 @@ class CameraFragment : Fragment() {
                         .format(System.currentTimeMillis()) + extension)
     }
 
+    private fun getErrorText(error: Int): String {
+        var message = ""
+        message = when (error) {
+            SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
+            SpeechRecognizer.ERROR_CLIENT -> "Client side error"
+            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Insufficient permissions"
+            SpeechRecognizer.ERROR_NETWORK -> "Network error"
+            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout"
+            SpeechRecognizer.ERROR_NO_MATCH -> "No match"
+            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "RecognitionService busy"
+            SpeechRecognizer.ERROR_SERVER -> "error from server"
+            SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech input"
+            else -> "Didn't understand, please try again."
+        }
+        return message
+    }
 }
